@@ -1,0 +1,30 @@
+{% extends "board/base.html" %}
+
+{% block title %}{{ post.title }} | HNU Board{% endblock %}
+
+{% block content %}
+<p class="back"><a href="{% url 'board:list' %}?year={{ post.year.number }}{% if post.program %}&amp;program={{ post.program.slug }}{% endif %}">&larr; Back to the board</a></p>
+
+<article class="card card--detail card--{{ post.kind }}{% if post.is_overdue %} card--closed{% endif %}">
+  <p class="card__meta">
+    <span class="tag">{{ post.get_kind_display }}</span>
+    <span>{{ post.year.name }}{% if post.program %} · {{ post.program.name }}{% endif %}</span>
+    {% include "board/_deadline_badge.html" %}
+  </p>
+  <h1>{{ post.title }}</h1>
+  {% if post.course %}<p class="card__course">{{ post.course }}</p>{% endif %}
+  {% if post.deadline %}<p class="deadline deadline--big">Deadline: {{ post.deadline|date:"D j M Y, H:i" }}</p>{% endif %}
+  {% if post.body %}<p class="prose">{{ post.body|linebreaksbr }}</p>{% endif %}
+  {% if post.notes %}<div class="notes"><h2>Notes</h2><p class="prose">{{ post.notes|linebreaksbr }}</p></div>{% endif %}
+
+  {% if post.resource_url or post.submission_url %}
+  <p class="actions">
+    {% if post.submission_url %}<a class="button button--primary" href="{{ post.submission_url }}" target="_blank" rel="noopener noreferrer">Submit here</a>{% endif %}
+    {% if post.resource_url %}<a class="button" href="{{ post.resource_url }}" target="_blank" rel="noopener noreferrer">Open resource</a>{% endif %}
+  </p>
+  {% endif %}
+  {% if post.is_assignment and not post.submission_url %}<p class="hint">No submission link for this assignment. Submit the way your TA told you.</p>{% endif %}
+
+  <p class="card__foot">Posted {{ post.published_at|date:"j M Y, H:i" }}{% if post.was_edited %} · Updated {{ post.updated_at|date:"j M Y, H:i" }}{% endif %}</p>
+</article>
+{% endblock %}

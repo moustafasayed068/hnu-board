@@ -1,0 +1,1 @@
+{% if post.deadline %}{% if post.is_overdue %}<span class="badge badge--closed">Closed</span>{% else %}<span class="badge{% if post.is_due_soon %} badge--soon{% endif %}">Due in {{ post.deadline|timeuntil }}</span>{% endif %}{% endif %}

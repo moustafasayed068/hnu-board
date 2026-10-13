@@ -1,0 +1,83 @@
+{% extends "board/base.html" %}
+{% load static %}
+
+{% block title %}{% if year and program %}{{ year.name }} · {{ program.name }} | {% elif course %}{{ course.code }} | {% endif %}HNU Board{% endblock %}
+
+{% block content %}
+{% if show_board %}
+  <h1 class="board-title">{% if year and program %}{{ year.name }} · {{ program.name }}{% else %}{{ course }}{% endif %}</h1>
+{% else %}
+  <section class="hero">
+    <h1>Never miss a deadline</h1>
+    <p>Every assignment and announcement from your TAs, in one place. Pick your level and program to open your board.</p>
+  </section>
+{% endif %}
+
+{# The filters are plain links, so every board has a URL you can bookmark and share. #}
+<section class="picker">
+  {% if show_board %}<details><summary>Change level or program</summary>{% endif %}
+  <div class="picker__group">
+    <h2><span class="step">1</span> Level</h2>
+    <div class="chips chips--levels">
+      {% for item in form.fields.year.queryset %}
+      <a class="chip{% if item == year %} is-active{% endif %}" href="{% querystring year=item.number course=None page=None %}">{{ item.name }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="picker__group">
+    <h2><span class="step">2</span> Program</h2>
+    <div class="chips">
+      {% for item in form.fields.program.queryset %}
+      <a class="chip{% if item == program %} is-active{% endif %}" href="{% querystring program=item.slug course=None page=None %}">{{ item.name }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% if show_board %}</details>{% endif %}
+
+  <form method="get" action="{% url 'board:list' %}" class="picker__group course-form" data-autosubmit>
+    {% if year %}<input type="hidden" name="year" value="{{ year.number }}">{% endif %}
+    {% if program %}<input type="hidden" name="program" value="{{ program.slug }}">{% endif %}
+    {% if kind %}<input type="hidden" name="type" value="{{ kind }}">{% endif %}
+    <h2><label for="{{ form.course.id_for_label }}">{% if year and program %}Course{% else %}Retaking a course? Open it directly{% endif %}</label></h2>
+    <div class="course-form__row">
+      {{ form.course }}
+      <button type="submit">Show</button>
+    </div>
+    <p class="hint">{{ semester }} courses only.</p>
+  </form>
+</section>
+
+{% if show_board %}
+  <nav class="tabs" aria-label="Post type">
+    <a class="tab{% if not kind %} is-active{% endif %}" href="{% querystring type=None page=None %}">All</a>
+    <a class="tab{% if kind == 'assignment' %} is-active{% endif %}" href="{% querystring type='assignment' page=None %}">Assignments</a>
+    <a class="tab{% if kind == 'announcement' %} is-active{% endif %}" href="{% querystring type='announcement' page=None %}">Announcements</a>
+  </nav>
+
+  {% if due_soon %}
+  <section>
+    <h2 class="section-title">Due soon <span class="count">{{ due_soon|length }}</span></h2>
+    {% for post in due_soon %}{% include "board/_post_card.html" %}{% endfor %}
+  </section>
+  {% endif %}
+
+  <section>
+    <h2 class="section-title">Recent posts</h2>
+    {% for post in page %}
+      {% include "board/_post_card.html" %}
+    {% empty %}
+      <p class="empty">{% if due_soon %}Nothing else yet.{% else %}Nothing posted here yet. Check back soon.{% endif %}</p>
+    {% endfor %}
+
+    {% if page.has_other_pages %}
+    <nav class="pager" aria-label="Pages">
+      {% if page.has_previous %}<a class="chip" href="{% querystring page=page.previous_page_number %}">&larr; Newer</a>{% else %}<span></span>{% endif %}
+      <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+      {% if page.has_next %}<a class="chip" href="{% querystring page=page.next_page_number %}">Older &rarr;</a>{% else %}<span></span>{% endif %}
+    </nav>
+    {% endif %}
+  </section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="{% static 'board/filter.js' %}" defer></script>{% endblock %}

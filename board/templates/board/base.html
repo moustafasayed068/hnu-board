@@ -1,0 +1,28 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1b3667">
+  <title>{% block title %}HNU Board{% endblock %}</title>
+  <link rel="icon" href="{% static 'board/faculty-logo.png' %}">
+  <link rel="stylesheet" href="{% static 'board/site.css' %}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="{% url 'board:list' %}">
+      <img src="{% static 'board/faculty-logo.png' %}" alt="" width="44" height="44">
+      <span>
+        <strong>HNU Board</strong>
+        <small>Faculty of Computer Science &amp; IT</small>
+      </span>
+    </a>
+  </header>
+  <div class="stripe" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">Helwan National University · All times are Cairo time</footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
