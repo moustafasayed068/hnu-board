@@ -121,6 +121,11 @@ USE_TZ = True
 # Which semester's courses students can pick: "1" or "2". Empty = guess from the date.
 CURRENT_SEMESTER = os.environ.get('DJANGO_CURRENT_SEMESTER', '')
 
+# WhatsApp import (board/ingest.py). Empty token = the import URLs return 404.
+INGEST_TOKEN = os.environ.get('INGEST_TOKEN', '')
+# Account that bot posts are credited to; created automatically, can't log in.
+INGEST_USERNAME = os.environ.get('INGEST_USERNAME', 'whatsapp-bot')
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/

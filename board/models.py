@@ -143,6 +143,8 @@ class Post(models.Model):
         default=timezone.now, help_text="A future date hides the post until then."
     )
     notes = models.TextField(blank=True, help_text="Extra instructions shown under the post.")
+    # Set only by the WhatsApp import (board/ingest.py) so a message is never imported twice.
+    source_id = models.CharField(max_length=200, unique=True, null=True, blank=True, editable=False)
     # Set by PostAdmin.save_model, never by a form. PROTECT: deactivate TAs, don't delete them.
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="posts", editable=False
