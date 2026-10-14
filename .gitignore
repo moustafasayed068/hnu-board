@@ -4,3 +4,5 @@ db.sqlite3
 staticfiles/
 __pycache__/
 backup-*.json
+node_modules/
+whatsapp-bot/auth/

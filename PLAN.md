@@ -341,6 +341,17 @@ Run `python manage.py test board` before every commit.
 
 ---
 
+## WhatsApp import (added after MVP)
+
+The faculty posts assignments for all four levels in one WhatsApp channel. A bot copies them to the board.
+
+- **Flow:** `whatsapp-bot/` (Node + Baileys, on a free Oracle Cloud VM, spare number) → Cohere LLM extracts kind, level, course code, deadline, links → `POST /ingest/` with header `X-Ingest-Token` → `board/ingest.py` validates with `full_clean()` and publishes.
+- **Why an endpoint:** WhatsApp has no official API for channels, so something outside PythonAnywhere must read them and hand the posts over. One token-protected view is the smallest way to do that.
+- **Repairs instead of rejecting:** invalid links are dropped, a program the course isn't offered to becomes the whole level, and an assignment without a course or valid deadline becomes an announcement. Only a message whose level can't be found is refused (422).
+- **Duplicates:** `Post.source_id` (`<channel>:<message id>[:<program>]`, unique).
+- **Risk:** Baileys is unofficial; the spare number can be banned. Setup and recovery: `whatsapp-bot/SETUP.md`.
+- **Tests:** `board/tests/test_ingest.py`.
+
 ## Optional later improvements (not MVP)
 
 | Improvement | Add it when |

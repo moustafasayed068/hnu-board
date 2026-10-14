@@ -30,6 +30,15 @@ I am a CS student learning Django backend development. I want to understand and 
 - `TIME_ZONE = "Africa/Cairo"`, `USE_TZ = True`. Always use `django.utils.timezone.now()`.
 - Secrets only from environment variables / `.env`. Never commit `.env`, `db.sqlite3` or backups.
 
+### Approved exception: WhatsApp import
+
+The owner approved one write path outside the admin (see `PLAN.md`, "WhatsApp import"):
+`board/ingest.py` (`POST /ingest/`, `GET /ingest/courses/`), guarded by the `INGEST_TOKEN`
+shared secret (empty = 404). Posts are published at once, credited to the inactive
+`whatsapp-bot` user, and deduplicated by `Post.source_id`. The Node bot that calls it lives
+in `whatsapp-bot/` and runs on a separate server, not on PythonAnywhere. Don't add other
+endpoints or dependencies on the back of this exception.
+
 ## Data model summary
 
 `AcademicYear`, `Program`, `Course` (M2M to `Program`; empty = common course; `semester` 1 or 2), and one `Post` model with `kind` = assignment | announcement. See `PLAN.md` Part C for fields, validation rules and indexes. Public query lives in `Post.objects.visible_to(year, program)`.

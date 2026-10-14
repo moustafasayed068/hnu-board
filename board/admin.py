@@ -28,10 +28,10 @@ class PostAdmin(admin.ModelAdmin):
     """TAs see, edit and delete only their own posts. Superusers manage everything."""
 
     list_display = ["title", "kind", "course", "year", "program", "deadline", "published_at", "created_by"]
-    list_filter = ["kind", "year", "program"]
+    list_filter = ["kind", "year", "program", "created_by"]  # filter by the bot to review imports
     search_fields = ["title", "body"]
     autocomplete_fields = ["course"]
-    readonly_fields = ["created_by", "created_at", "updated_at"]
+    readonly_fields = ["created_by", "created_at", "updated_at", "source_id"]
 
     def _owns(self, request, obj):
         return obj is None or request.user.is_superuser or obj.created_by_id == request.user.pk

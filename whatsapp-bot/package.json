@@ -1,0 +1,20 @@
+{
+  "name": "hnu-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Listens to HNU WhatsApp channels and pushes new posts to the HNU Board Django site",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "find-channel": "node find-channel.js"
+  },
+  "dependencies": {
+    "baileys": "7.0.0-rc14",
+    "dotenv": "^16.4.5",
+    "pino": "^9.4.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
