@@ -19,8 +19,10 @@ await connect((sock) => {
       const meta = await sock.newsletterMetadata('invite', code);
       if (!meta) throw new Error('channel not found, check the link');
       await sock.newsletterFollow(meta.id);
-      console.log(`\nFollowing "${meta.name}"`);
-      console.log(`Add this to CHANNELS in .env:  ${meta.id}\n`);
+      const name = meta.thread_metadata?.name?.text || meta.name || meta.id;
+      console.log(`\nFollowing "${name}"`);
+      console.log(`Add this to CHANNELS in .env:  ${meta.id}=LEVEL`);
+      console.log('Replace LEVEL with the channel\'s level (1-4), or remove "=LEVEL" if it posts for all levels.\n');
     } catch (e) {
       console.error('Lookup failed:', e.message);
     }

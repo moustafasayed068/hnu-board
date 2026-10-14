@@ -6,8 +6,17 @@ import { parsePost } from './parser.js';
 const SITE = process.env.SITE_URL.replace(/\/$/, ''); // e.g. https://mosuatafa.pythonanywhere.com
 const HEADERS = { 'Content-Type': 'application/json', 'X-Ingest-Token': process.env.INGEST_TOKEN };
 
-// CHANNELS="1203...@newsletter,1204...@newsletter"
-const CHANNELS = new Set((process.env.CHANNELS || '').split(',').map((s) => s.trim()).filter(Boolean));
+// CHANNELS="1203...@newsletter=4,1204...@newsletter" → channel id = default level (optional)
+const CHANNELS = new Map(
+  (process.env.CHANNELS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [jid, level] = entry.split('=');
+      return [jid.trim(), Number(level) || 0];
+    }),
+);
 if (!CHANNELS.size) {
   logger.error('No CHANNELS set in .env. Run: npm run find-channel -- <channel link>');
   process.exit(1);
@@ -77,6 +86,7 @@ async function handle(msg) {
 
   const postedAt = new Date(Number(msg.messageTimestamp || Date.now() / 1000) * 1000);
   const parsed = await parsePost(text, { postedAt, courses: await getCourses() });
+  if (!parsed.year) parsed.year = CHANNELS.get(jid); // level not in the text: use the channel's
   if (!parsed.is_relevant) {
     logger.info({ preview: text.slice(0, 60) }, 'Skipped (not relevant)');
     return;
@@ -101,4 +111,4 @@ await connect((sock) => {
   });
 });
 
-logger.info({ channels: [...CHANNELS] }, 'Watching channels');
+logger.info({ channels: Object.fromEntries(CHANNELS) }, 'Watching channels');
