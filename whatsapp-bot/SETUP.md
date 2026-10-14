@@ -119,3 +119,11 @@ On the next post in the channel you'll see `Published`, and the post appears on 
 - Any wrong post: open the admin at `/manage/`. Use the **created by** filter and choose `whatsapp-bot` to see only the bot's posts. Edit or delete them (superuser only).
 - `Site refused the post` in the logs means the bot couldn't tell which level the message was for. Add the post by hand.
 - Attached files (PDFs and images) aren't uploaded. Only the text or caption goes through.
+
+## When the bot was off
+
+Every time it connects, the bot fetches the channel's last 30 posts and publishes any it hasn't handled yet. So if the PC was off, it catches up on its own as soon as it comes back on. The site never publishes the same post twice.
+
+- `state.json` stores the time of the last post handled, per channel. On the first run it starts from "now", so it doesn't import the channel's old posts.
+- If more than 30 posts went by while it was off, only the last 30 come through.
+- If you move the bot to another machine, copy the `auth` folder and `state.json` along with it.

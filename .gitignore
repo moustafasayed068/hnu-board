@@ -6,3 +6,4 @@ __pycache__/
 backup-*.json
 node_modules/
 whatsapp-bot/auth/
+whatsapp-bot/state.json
