@@ -74,16 +74,17 @@ Check it works: `https://mosuatafa.pythonanywhere.com/ingest/courses/` should sh
 ## 4) Link the spare number and the channel
 
 ```bash
-npm run find-channel -- https://whatsapp.com/channel/XXXXXXXX
+npm run find-channel -- "https://whatsapp.com/channel/XXXXXXXX"
 ```
 
 - A QR code appears. On the **spare phone**, go to WhatsApp → **Linked devices** → **Link a device** and scan it.
 - The bot follows the channel by itself and prints a line like:
-  `Add this to CHANNELS in .env:  120363...@newsletter`
-- Put it in `.env`:
+  `Add this to CHANNELS in .env:  120363...@newsletter=LEVEL`
+- Put it in `.env`, replacing `LEVEL` with the channel's level. The level is used when a message doesn't state it.
   ```bash
-  nano .env      # CHANNELS=120363...@newsletter
+  nano .env      # CHANNELS=120363...@newsletter=4
   ```
+  For more than one channel, separate them with a comma: `CHANNELS=id1@newsletter=4,id2@newsletter=3`
 
 ---
 
