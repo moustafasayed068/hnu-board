@@ -135,17 +135,30 @@ function enqueue(messages) {
   return queue;
 }
 
-async function catchUp(sock) {
+// Runs inside the queue, so live messages that arrive meanwhile wait until the missed posts
+// are handled (otherwise a live message moves the saved time forward and hides the older ones).
+function catchUp(sock) {
   siteDown = false;
   for (const jid of CHANNELS.keys()) {
-    try {
-      const missed = (await fetchRecent(sock, jid)).filter((m) => m.messageTimestamp > state[jid]);
-      if (missed.length) logger.info({ channel: jid, count: missed.length }, 'Catching up on missed posts');
-      await enqueue(missed);
-    } catch (e) {
-      logger.warn({ channel: jid, err: e.message }, 'Could not fetch missed posts');
-    }
+    queue = queue.then(async () => {
+      try {
+        const since = state[jid];
+        const { messages, counts } = await fetchRecent(sock, jid);
+        const missed = messages.filter((m) => Number(m.messageTimestamp) > since);
+        logger.info({ channel: jid, fetched: counts, missed: missed.length }, 'Checked for missed posts');
+        for (const msg of missed) {
+          try {
+            await handle(msg);
+          } catch (e) {
+            logger.error({ err: e.message }, 'Failed to handle message');
+          }
+        }
+      } catch (e) {
+        logger.warn({ channel: jid, err: e.message }, 'Could not fetch missed posts');
+      }
+    });
   }
+  return queue;
 }
 
 await connect((sock) => {
