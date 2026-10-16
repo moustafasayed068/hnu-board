@@ -4,9 +4,9 @@
     {% if post.course %}<span class="code">{{ post.course.code }}</span>{% endif %}
     {% include "board/_deadline_badge.html" %}
   </p>
-  <h3><a class="card__link" href="{{ post.get_absolute_url }}">{{ post.title }}</a></h3>
+  <h3 dir="auto"><a class="card__link" href="{{ post.get_absolute_url }}">{{ post.title }}</a></h3>
   {% if post.course %}<p class="card__course">{{ post.course.name }}</p>{% endif %}
   {% if post.deadline %}<p class="deadline">Deadline: {{ post.deadline|date:"D j M Y, H:i" }}</p>{% endif %}
-  {% if post.body %}<p class="card__body">{{ post.body|truncatewords:28 }}</p>{% endif %}
+  {% if post.body %}<p class="card__body" dir="auto">{{ post.body|truncatewords:28 }}</p>{% endif %}
   <p class="card__foot">Posted {{ post.published_at|date:"j M Y" }}{% if post.was_edited %} · Updated {{ post.updated_at|date:"j M Y, H:i" }}{% endif %}</p>
 </article>
