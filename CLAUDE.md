@@ -39,6 +39,14 @@ shared secret (empty = 404). Posts are published at once, credited to the inacti
 in `whatsapp-bot/` and runs on a separate server, not on PythonAnywhere. Don't add other
 endpoints or dependencies on the back of this exception.
 
+### Approved exception: Telegram import
+
+Also approved (19 Oct 2026, see `PLAN.md`, "Telegram import"): `board/telegram.py`
+(`POST /telegram/<secret>/`), a Telegram webhook so the owner can forward posts from the
+phone when the PC is off. Guarded by `TELEGRAM_WEBHOOK_SECRET` (URL + header) and
+`TELEGRAM_ALLOWED_USER_IDS`; empty token/secret = 404. Parses with Cohere via `board/llm.py`
+(standard library only). Both imports deduplicate by `Post.source_id` and `Post.text_hash`.
+
 ## Data model summary
 
 `AcademicYear`, `Program`, `Course` (M2M to `Program`; empty = common course; `semester` 1 or 2), and one `Post` model with `kind` = assignment | announcement. See `PLAN.md` Part C for fields, validation rules and indexes. Public query lives in `Post.objects.visible_to(year, program)`.

@@ -145,6 +145,9 @@ class Post(models.Model):
     notes = models.TextField(blank=True, help_text="Extra instructions shown under the post.")
     # Set only by the WhatsApp import (board/ingest.py) so a message is never imported twice.
     source_id = models.CharField(max_length=200, unique=True, null=True, blank=True, editable=False)
+    # Fingerprint of the original message text (board/ingest.py text_fingerprint), so the same
+    # post arriving from WhatsApp and from a Telegram forward is published only once.
+    text_hash = models.CharField(max_length=64, null=True, blank=True, editable=False, db_index=True)
     # Set by PostAdmin.save_model, never by a form. PROTECT: deactivate TAs, don't delete them.
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="posts", editable=False
