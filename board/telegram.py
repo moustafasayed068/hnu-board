@@ -8,23 +8,24 @@ caught up later by the WhatsApp bot is not published twice.
 import hmac
 import io
 import json
-import uuid
-from copy import copy
 import logging
 import re
 import urllib.request
+import uuid
+from copy import copy
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from .ingest import bot_user, is_duplicate, publish, save_post, text_fingerprint
+from .ingest import bot_user, is_duplicate, post_source_id, publish, save_post, text_fingerprint
 from .llm import parse_post
 from .models import AcademicYear, Course, Post, Program, SiteNotice
 
@@ -36,7 +37,7 @@ HELP = (
     "Something wrong? Reply to my message with the fix, e.g. #L3 or #DSC301 or #mse, "
     "or #delete to remove it.\n\n"
     "Tags (also usable when forwarding, optional):\n"
-    "#L4  level 4\n"
+    "#L4  level 4 (#L3 #L4 = both levels; no level = all levels)\n"
     "#ds #mse #rse  program (several = one post each), #all = whole level\n"
     "#DSC411  course code (no space)\n"
     "#assignment or #announcement\n\n"
@@ -127,14 +128,15 @@ def handle_message(message, request):
     ]
     data = parse_post(text, posted_at, courses)
     data.update(overrides)  # your tags win over the AI's guess
-    if "year" in overrides and "course_code" not in overrides:
-        # The AI's course must be on the level you tagged, or the post would move to its level.
+    if "years" in overrides and "course_code" not in overrides:
+        # The AI's course must be on a level you tagged, or the post would move to its level.
         levels = {c["code"].lower(): c["level"] for c in courses}
         guessed = (data.get("course_code") or "").strip().lower()
-        if guessed and levels.get(guessed) != overrides["year"]:
+        if guessed and levels.get(guessed) not in overrides["years"]:
             data["course_code"] = data["course_hint"] = ""
-    if not data.get("year") and not data.get("course_code") and settings.TELEGRAM_DEFAULT_LEVEL:
-        data["year"] = settings.TELEGRAM_DEFAULT_LEVEL  # level not in the text: use the default
+    data.pop("year", None)  # only "years" from here on
+    if not data.get("years") and not data.get("course_code") and settings.TELEGRAM_DEFAULT_LEVEL:
+        data["years"] = [settings.TELEGRAM_DEFAULT_LEVEL]  # optional default; else every level
     data["posted_at"] = posted_at.isoformat()
     # You chose to forward it, so it's published even if the LLM thinks it's not relevant.
 
@@ -151,57 +153,82 @@ def handle_message(message, request):
 
 
 def correct_posts(replied_to, text, request):
-    """Fix (or delete) the posts listed in the bot message you replied to, using your tags."""
+    """Fix (or delete) the posts listed in the bot message you replied to, using your tags.
+
+    The copies of one message (one per level and/or program) are rebuilt from the first one,
+    so e.g. #L3 on a post shown to all levels leaves a single Level 3 post.
+    """
     rest, overrides, unknown = read_tags(text)
     if unknown or rest or not overrides:
         return ("To fix a post, reply with tags only, e.g. #L3, #DSC301, #mse, #all, "
                 "#assignment or #delete.")
     ids = [int(pk) for pk in POST_LINK.findall(replied_to)]
     # Only the imports' own posts: TAs' posts are changed in the admin, by their authors.
-    posts = list(Post.objects.filter(pk__in=ids, created_by=bot_user()).order_by("pk"))
+    posts = list(Post.objects.filter(pk__in=ids, created_by=bot_user())
+                 .select_related("year", "program", "course").order_by("pk"))
     if not posts:
         return "That post is gone (or wasn't made by the import)."
-
     if overrides.get("delete"):
         Post.objects.filter(pk__in=[p.pk for p in posts]).delete()
         return f"Deleted: {posts[0].title}"
 
     template = posts[0]
+    course = template.course
+    years = unique(p.year for p in posts)
     if "course_code" in overrides:
-        template.course = Course.objects.get(code=overrides["course_code"])
-        template.year = template.course.year
-    elif "year" in overrides:
-        template.year = AcademicYear.objects.filter(number=overrides["year"]).first() or template.year
-        if template.course and template.course.year != template.year:
-            template.course = None  # the course belongs to another level
-    if "kind" in overrides:
-        template.kind = overrides["kind"]
-
-    if "programs" in overrides:  # rebuild one post per program from the first one
+        course = Course.objects.get(code=overrides["course_code"])
+        years = [course.year]
+    elif "years" in overrides:
+        levels = list(AcademicYear.objects.filter(number__in=overrides["years"]).order_by("number"))
+        if levels:
+            years = levels
+            if course and course.year not in levels:
+                course = None  # the course belongs to another level
+    programs = unique(p.program for p in posts)
+    if "programs" in overrides:
         programs = list(Program.objects.filter(slug__in=overrides["programs"], is_active=True)) or [None]
-        Post.objects.filter(pk__in=[p.pk for p in posts[1:]]).delete()
-        base = template.source_id or f"telegram:fix:{template.pk}"
-        if template.program and base.endswith(":" + template.program.slug):
-            base = base[: -len(template.program.slug) - 1]
-        posts = []
-        for i, program in enumerate(programs):
-            post = template if i == 0 else copy(template)
-            if i:
-                post.pk = post.id = None  # saved as a new post
-                post._state.adding = True
-            post.program = program
-            post.source_id = f"{base}:{program.slug}" if program else base
-            posts.append(post)
-    else:
-        for post in posts[1:]:  # same level/course/kind for every program's copy
-            post.year, post.course, post.kind = template.year, template.course, template.kind
+    kind = overrides.get("kind", template.kind)
+    base = message_source_id(template.source_id) or f"telegram:fix:{template.pk}"
 
     try:
-        for post in posts:
-            save_post(post)  # same checks and repairs as a new post
+        with transaction.atomic():
+            Post.objects.filter(pk__in=[p.pk for p in posts]).delete()
+            saved = []
+            for year in years:
+                for program in programs:
+                    post = copy(template)
+                    post.pk = post.id = None
+                    post._state.adding = True
+                    post_course = course if course and course.year == year else None
+                    post.year, post.program, post.course, post.kind = year, program, post_course, kind
+                    post.source_id = post_source_id(base, year if len(years) > 1 else None, program)
+                    save_post(post)  # same checks and repairs as a new post
+                    saved.append(post)
     except ValidationError as error:
         return f"Couldn't save the fix: {error.messages}"
-    return f"Updated:\n{describe(posts, request)}"
+    return f"Updated:\n{describe(saved, request)}"
+
+
+def unique(items):
+    """Distinct items, first-seen order (None counts as an item)."""
+    seen = []
+    for item in items:
+        if item not in seen:
+            seen.append(item)
+    return seen
+
+
+def message_source_id(source_id):
+    """The message part of a post's source_id, without the :L<level> and :<program> suffixes."""
+    if not source_id:
+        return None
+    slugs = set(Program.objects.values_list("slug", flat=True))
+    parts = source_id.split(":")
+    if parts and parts[-1] in slugs:
+        parts.pop()
+    if parts and re.fullmatch(r"L\d", parts[-1]):
+        parts.pop()
+    return ":".join(parts)
 
 
 def read_tags(text):
@@ -216,7 +243,9 @@ def read_tags(text):
     def take(match):
         tag = match.group(1).lower()
         if re.fullmatch(r"l[1-4]", tag):
-            overrides["year"] = int(tag[1])
+            overrides.setdefault("years", [])
+            if int(tag[1]) not in overrides["years"]:
+                overrides["years"].append(int(tag[1]))
         elif tag in PROGRAM_TAGS:
             programs.append(tag)
         elif tag == "delete":
@@ -240,18 +269,24 @@ def read_tags(text):
 
 
 def describe(posts, request):
-    """One line per post: what was saved, plus a link to fix it in the admin."""
-    lines = []
-    for post in posts:
-        parts = [post.title, post.get_kind_display(), str(post.year)]
-        parts.append(post.program.name if post.program else "all programs")
-        if post.course:
-            parts.append(post.course.code)
-        if post.deadline:
-            parts.append("due " + timezone.localtime(post.deadline).strftime("%a %d %b %H:%M"))
-        edit = request.build_absolute_uri(reverse("admin:board_post_change", args=[post.pk]))
-        lines.append(" · ".join(parts) + f"\nEdit: {edit}")
-    return "\n\n".join(lines)
+    """What was saved (once), where it shows, and a link per copy to fix it in the admin."""
+    if not posts:
+        return ""
+    first = posts[0]
+    parts = [first.title, first.get_kind_display()]
+    if first.course:
+        parts.append(first.course.code)
+    if first.deadline:
+        parts.append("due " + timezone.localtime(first.deadline).strftime("%a %d %b %H:%M"))
+    where = ", ".join(
+        f"{p.year}" + (f" {p.program.slug.upper()}" if p.program else "") for p in posts
+    )
+    if len(posts) == AcademicYear.objects.count() and len(unique(p.year for p in posts)) > 1:
+        where += "  (level unknown, shown to all levels: reply #L1-#L4 to pick one)"
+    links = "\n".join(
+        request.build_absolute_uri(reverse("admin:board_post_change", args=[p.pk])) for p in posts
+    )
+    return " · ".join(parts) + f"\nShown on: {where}\nEdit:\n{links}"
 
 
 def set_notice(text):

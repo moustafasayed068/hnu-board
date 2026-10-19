@@ -85,10 +85,14 @@ class IngestTests(BoardTestCase):
         self.send(deadline=(timezone.now() - timedelta(days=3)).isoformat())
         self.assertIsNone(Post.objects.get().deadline)
 
-    def test_unknown_level_is_refused(self):
-        response = self.send(year=0)
-        self.assertEqual(response.status_code, 422)
-        self.assertFalse(Post.objects.exists())
+    def test_unknown_level_is_shown_on_every_level(self):
+        response = self.send(year=0, programs=["ds"])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(Post.objects.values_list("year__number", "program__slug")),
+                         {(2, "ds"), (3, "ds")})
+        self.assertEqual(set(Post.objects.values_list("source_id", flat=True)),
+                         {"chan:1:L2:ds", "chan:1:L3:ds"})
+        self.assertTrue(self.send(year=0).json()["duplicate"])  # still imported once
 
     def test_bad_json(self):
         response = self.client.post(reverse("board:ingest_post"), "not json",
@@ -128,6 +132,11 @@ class IngestTests(BoardTestCase):
         self.send(source_id="chan:1", text="Hello students")
         self.assertTrue(check(source_id="chan:1", text="Hello students"))
         self.assertTrue(check(source_id="other:5", text="hello   students"))
+
+
+    def test_several_levels_make_one_post_each(self):
+        self.send(years=[2, 3], year=None)
+        self.assertEqual(set(Post.objects.values_list("year__number", flat=True)), {2, 3})
 
 
 class FingerprintTests(BoardTestCase):

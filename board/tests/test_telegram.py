@@ -16,7 +16,7 @@ ME = 111
 def parsed(**fields):
     """What the LLM would return for a simple level-3 announcement."""
     data = {"is_relevant": True, "kind": "announcement", "title": "Quiz", "body": "Quiz",
-            "year": 3, "programs": [], "course_code": "", "course_hint": "",
+            "years": [3], "programs": [], "course_code": "", "course_hint": "",
             "deadline": "", "submission_url": "", "resource_url": ""}
     data.update(fields)
     return data
@@ -77,15 +77,19 @@ class TelegramTests(BoardTestCase):
         self.send()
         self.assertTrue(Post.objects.exists())
 
-    def test_unknown_level_asks_to_add_it(self, parse_post, send_message):
-        parse_post.return_value = parsed(year=0)
+    def test_unknown_level_goes_to_all_levels_and_can_be_narrowed(self, parse_post, send_message):
+        parse_post.return_value = parsed(years=[])
         self.send()
-        self.assertFalse(Post.objects.exists())
-        self.assertIn("#L4", self.reply(send_message))
+        self.assertEqual(set(Post.objects.values_list("year__number", flat=True)), {2, 3})
+        self.assertIn("shown to all levels", self.reply(send_message))
+        self.fix(send_message, "#L3")
+        post = Post.objects.get()
+        self.assertEqual(post.year, self.level3)
+        self.assertEqual(post.source_id, "telegram:111:1")
 
     @override_settings(TELEGRAM_DEFAULT_LEVEL=3)
     def test_default_level_is_used_when_missing(self, parse_post, send_message):
-        parse_post.return_value = parsed(year=0)
+        parse_post.return_value = parsed(years=[])
         self.send()
         self.assertEqual(Post.objects.get().year, self.level3)
 
@@ -115,7 +119,7 @@ class TelegramTests(BoardTestCase):
         self.assertIn(f"/manage/board/post/{post.pk}/change/", reply)
 
     def test_tags_override_the_ai_and_are_removed_from_the_text(self, parse_post, send_message):
-        parse_post.return_value = parsed(year=2, programs=[])
+        parse_post.return_value = parsed(years=[2], programs=[])
         self.send(text="Quiz on Sunday #L3 #ds #DSC301")
         post = Post.objects.get()
         self.assertEqual(post.year, self.level3)
@@ -125,7 +129,7 @@ class TelegramTests(BoardTestCase):
         self.assertEqual(post.text_hash, text_fingerprint("Quiz on Sunday"))  # matches WhatsApp
 
     def test_level_tag_drops_an_ai_course_from_another_level(self, parse_post, send_message):
-        parse_post.return_value = parsed(year=0, course_code="BAS 204")  # a level-2 course
+        parse_post.return_value = parsed(years=[], course_code="BAS 204")  # a level-2 course
         self.send(text="Quiz on Sunday #L3")
         post = Post.objects.get()
         self.assertEqual(post.year, self.level3)
@@ -155,7 +159,7 @@ class TelegramTests(BoardTestCase):
         return self.send(text=tags, message_id=50, reply_to=self.reply(send_message))
 
     def test_reply_with_level_fixes_the_post(self, parse_post, send_message):
-        parse_post.return_value = parsed(year=3, course_code="GEN 317")
+        parse_post.return_value = parsed(years=[3], course_code="GEN 317")
         self.send()
         self.fix(send_message, "#L2")
         post = Post.objects.get()
@@ -228,3 +232,20 @@ class TelegramTests(BoardTestCase):
     def test_stranger_cannot_use_commands(self, parse_post, send_message):
         self.send(text="/notice hacked", user=999)
         self.assertIsNone(SiteNotice.current())
+
+    def test_two_level_tags_make_one_post_per_level(self, parse_post, send_message):
+        self.send(text="Quiz on Sunday #L2 #L3")
+        self.assertEqual(set(Post.objects.values_list("year__number", flat=True)), {2, 3})
+
+    def test_ai_can_return_several_levels(self, parse_post, send_message):
+        parse_post.return_value = parsed(years=[2, 3], course_code="GEN 317")
+        self.send()
+        posts = {p.year.number: p for p in Post.objects.all()}
+        self.assertEqual(set(posts), {2, 3})
+        self.assertEqual(posts[3].course, self.common)  # course only on its own level
+        self.assertIsNone(posts[2].course)
+
+    def test_reply_with_two_levels_spreads_the_post(self, parse_post, send_message):
+        self.send()
+        self.fix(send_message, "#L2 #L3")
+        self.assertEqual(set(Post.objects.values_list("year__number", flat=True)), {2, 3})

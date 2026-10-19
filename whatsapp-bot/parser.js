@@ -28,7 +28,7 @@ const SCHEMA = {
     kind: { type: 'string', enum: ['assignment', 'announcement'] },
     title: { type: 'string' },
     body: { type: 'string' },
-    year: { type: 'integer', enum: [0, 1, 2, 3, 4] },
+    years: { type: 'array', items: { type: 'integer', enum: [1, 2, 3, 4] } },
     programs: { type: 'array', items: { type: 'string', enum: ['ds', 'mse', 'rse'] } },
     course_code: { type: 'string' },
     course_hint: { type: 'string' },
@@ -37,7 +37,7 @@ const SCHEMA = {
     resource_url: { type: 'string' },
   },
   required: [
-    'is_relevant', 'kind', 'title', 'body', 'year', 'programs',
+    'is_relevant', 'kind', 'title', 'body', 'years', 'programs',
     'course_code', 'course_hint', 'deadline', 'submission_url', 'resource_url',
   ],
 };
@@ -64,7 +64,9 @@ async function parseWithCohere(text, postedAt, courses) {
     `- kind: "assignment" if students must submit something by a deadline, else "announcement"\n` +
     `- title: short title (max ~80 chars), keep the original language\n` +
     `- body: the message text without greetings and sign-offs\n` +
-    `- year: the level / الفرقة (1-4) if stated, else 0\n` +
+    `- years: the levels / الفرقة (1-4) the message is for, as stated (e.g. "الفرقة الرابعة" or "4th year" = [4]; ` +
+    `"الفرقة الثالثة والرابعة" = [3, 4]), or else the level of the matching course in the list below; ` +
+    `[] if it is for all students or the level is unclear\n` +
     `- programs: any of "ds" (Data Science / داتا ساينس), "mse" (Multimedia), "rse" (Robotics); ` +
     `empty list if the message is for everyone\n` +
     `- course_code: the code of the matching course from the list below, else ""\n` +
@@ -104,12 +106,14 @@ function parseWithRegex(text) {
   const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
   const links = text.match(/https?:\/\/\S+/g) || [];
   const yearMatch = text.match(/(?:level|الفرقة|المستوى)\s*(\d)/i);
+  const ordinal = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة']
+    .findIndex((w) => text.includes(`الفرقة ${w}`) || text.includes(`المستوى ${w}`));
   return {
     is_relevant: text.length > 40,
     kind: 'announcement',
     title: lines[0]?.slice(0, 80) || 'Untitled',
     body: text,
-    year: yearMatch ? Number(yearMatch[1]) : 0,
+    years: yearMatch ? [Number(yearMatch[1])] : ordinal >= 0 ? [ordinal + 1] : [], // [] = every level
     programs: [],
     course_code: '',
     course_hint: '',
