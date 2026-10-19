@@ -3,13 +3,18 @@
 
 {% block title %}{% if year and program %}{{ year.name }} · {{ program.name }} | {% elif course %}{{ course.code }} | {% endif %}HNU Board{% endblock %}
 
+{% block og_title %}{% if year and program %}{{ year.name }} · {{ program.name }} | HNU Board{% elif course %}{{ course.code }} | HNU Board{% else %}HNU Board{% endif %}{% endblock %}
+
 {% block content %}
 {% if show_board %}
+  {% if year and program %}<span hidden data-remember-board="?year={{ year.number }}&amp;program={{ program.slug }}" data-remember-label="{{ year.name }} · {{ program.name }}"></span>{% endif %}
   <h1 class="board-title">{% if year and program %}{{ year.name }} · {{ program.name }}{% else %}{{ course }}{% endif %}</h1>
 {% else %}
   <section class="hero">
     <h1>Never miss a deadline</h1>
     <p>Every assignment and announcement from your TAs, in one place. Pick your level and program to open your board.</p>
+    {# Filled by filter.js with the board you opened last time on this device. #}
+    <p class="resume" hidden data-resume><a class="button button--primary" href="#"></a></p>
   </section>
 {% endif %}
 

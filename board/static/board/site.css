@@ -156,3 +156,19 @@ main { max-width: 46rem; margin: 0 auto; padding: 1rem 1rem 2rem; }
   .picker { padding: 1.5rem; }
   .chips--levels { max-width: 26rem; }
 }
+
+/* ---- Home: "Continue to your board" (filled by filter.js) ---- */
+.resume { margin-top: 1rem; }
+.resume .button { background: #fff; color: var(--navy); }
+
+/* ---- Links inside post text ---- */
+.prose a { color: var(--navy); overflow-wrap: anywhere; direction: ltr; unicode-bidi: isolate; }
+
+/* ---- "What's new" banner ---- */
+.notice {
+  display: flex; align-items: flex-start; gap: 0.5rem; max-width: 46rem; width: calc(100% - 2rem); margin: 0.8rem auto 0;
+  padding: 0.7rem 0.9rem; background: #fff4e5; border: 1.5px solid #f4c27a; border-radius: var(--radius);
+}
+.notice p { flex: 1; font-size: 0.95rem; }
+.notice a { color: var(--navy); font-weight: 600; }
+.notice__close { border: 0; background: none; font-size: 1.4rem; line-height: 1; cursor: pointer; color: var(--muted); }

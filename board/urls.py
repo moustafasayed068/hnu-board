@@ -7,6 +7,7 @@ app_name = "board"
 urlpatterns = [
     path("", views.board_list, name="list"),
     path("post/<int:pk>/", views.post_detail, name="post_detail"),
+    path("post/<int:pk>/calendar.ics", views.post_calendar, name="post_calendar"),
     # WhatsApp import, used only by whatsapp-bot/ (see board/ingest.py)
     path("ingest/", ingest.ingest_post, name="ingest_post"),
     path("ingest/courses/", ingest.ingest_courses, name="ingest_courses"),

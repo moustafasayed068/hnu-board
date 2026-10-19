@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AcademicYear, Course, Post, Program
+from .models import AcademicYear, Course, Post, Program, SiteNotice
 
 
 @admin.register(AcademicYear)
@@ -52,3 +52,11 @@ class PostAdmin(admin.ModelAdmin):
         if not change:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(SiteNotice)
+class SiteNoticeAdmin(admin.ModelAdmin):
+    """"What's new" banner. Superusers only (TAs have no permission on this model)."""
+
+    list_display = ["text", "is_active", "created_at"]
+    list_editable = ["is_active"]

@@ -5,7 +5,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from board.ingest import text_fingerprint
-from board.models import Post
+from board.models import Post, SiteNotice
 
 from .base import BoardTestCase
 
@@ -198,3 +198,33 @@ class TelegramTests(BoardTestCase):
         reply = self.reply(send_message)
         self.send(text="#delete", user=999, reply_to=reply)
         self.assertTrue(Post.objects.exists())
+
+    def test_notice_command_publishes_and_hides_the_banner(self, parse_post, send_message):
+        self.send(text="/notice New: add deadlines to your calendar")
+        self.assertEqual(SiteNotice.current().text, "New: add deadlines to your calendar")
+        self.send(text="/notice Second one", message_id=2)
+        self.assertEqual(SiteNotice.objects.filter(is_active=True).count(), 1)
+        self.send(text="/notice off", message_id=3)
+        self.assertIsNone(SiteNotice.current())
+        self.assertFalse(Post.objects.exists())
+        parse_post.assert_not_called()
+
+    def test_status_reports_imports(self, parse_post, send_message):
+        self.send()
+        self.send(text="/status", message_id=2)
+        reply = self.reply(send_message)
+        self.assertIn("Telegram, last post:", reply)
+        self.assertIn("1 from Telegram", reply)
+
+    @mock.patch("board.telegram.urllib.request.urlopen")
+    def test_backup_is_sent_as_a_file(self, urlopen, parse_post, send_message):
+        self.make_post("Backed up")
+        self.send(text="/backup")
+        request = urlopen.call_args.args[0]
+        self.assertTrue(request.full_url.endswith("/sendDocument"))
+        self.assertIn(b"Backed up", request.data)
+        self.assertIn(b'filename="backup-', request.data)
+
+    def test_stranger_cannot_use_commands(self, parse_post, send_message):
+        self.send(text="/notice hacked", user=999)
+        self.assertIsNone(SiteNotice.current())

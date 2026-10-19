@@ -6,15 +6,18 @@ Posts are deduplicated by their text (ingest.text_fingerprint), so the same post
 caught up later by the WhatsApp bot is not published twice.
 """
 import hmac
+import io
 import json
+import uuid
 from copy import copy
 import logging
 import re
 import urllib.request
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.http import Http404, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -23,7 +26,7 @@ from django.views.decorators.http import require_POST
 
 from .ingest import bot_user, is_duplicate, publish, save_post, text_fingerprint
 from .llm import parse_post
-from .models import AcademicYear, Course, Post, Program
+from .models import AcademicYear, Course, Post, Program, SiteNotice
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +40,10 @@ HELP = (
     "#ds #mse #rse  program (several = one post each), #all = whole level\n"
     "#DSC411  course code (no space)\n"
     "#assignment or #announcement\n\n"
-    "#delete  remove the post (only when replying)"
+    "#delete  remove the post (only when replying)\n\n"
+    "/notice <text>  show a \"What's new\" banner on the site (/notice off hides it)\n"
+    "/status  last imports and counts\n"
+    "/backup  send me a backup of the database"
 )
 
 PROGRAM_TAGS = {"ds", "mse", "rse"}
@@ -90,6 +96,13 @@ def handle_message(message, request):
     text = (message.get("text") or message.get("caption") or "").strip()
     if not text or text in ("/start", "/help"):
         return HELP
+    if text == "/notice" or text.startswith("/notice "):
+        return set_notice(text[len("/notice"):].strip())
+    if text == "/status":
+        return status()
+    if text == "/backup":
+        send_backup(message["chat"]["id"])
+        return "Backup sent above. Keep it private: it contains the admins' password hashes."
     replied_to = (message.get("reply_to_message") or {}).get("text") or ""
     if POST_LINK.search(replied_to):
         return correct_posts(replied_to, text, request)
@@ -239,6 +252,71 @@ def describe(posts, request):
         edit = request.build_absolute_uri(reverse("admin:board_post_change", args=[post.pk]))
         lines.append(" · ".join(parts) + f"\nEdit: {edit}")
     return "\n\n".join(lines)
+
+
+def set_notice(text):
+    """/notice <text> publishes a "What's new" banner; /notice off hides it."""
+    if not text:
+        current = SiteNotice.current()
+        return f"Current notice: {current.text}" if current else "No notice is shown. Send /notice <text>."
+    if text.lower() == "off":
+        SiteNotice.objects.filter(is_active=True).update(is_active=False)
+        return "Notice hidden."
+    notice = SiteNotice(text=text[:300])
+    notice.full_clean()
+    SiteNotice.objects.filter(is_active=True).update(is_active=False)  # one banner at a time
+    notice.save()
+    return f"Notice is live on the site:\n{notice.text}"
+
+
+def status():
+    """Health check for the owner: is each import still bringing posts in?"""
+    imported = Post.objects.filter(created_by=bot_user())
+    from_telegram = imported.filter(source_id__startswith="telegram:")
+    from_whatsapp = imported.exclude(source_id__startswith="telegram:")
+    month_start = timezone.localtime().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    now = timezone.now()
+
+    def last(posts):
+        post = posts.order_by("-created_at").first()
+        if not post:
+            return "never"
+        ago = now - post.created_at
+        when = f"{ago.days} days ago" if ago.days else f"{ago.seconds // 3600} h ago"
+        return f"{when} ({post.title[:40]})"
+
+    lines = [
+        f"WhatsApp bot, last post: {last(from_whatsapp)}",
+        f"Telegram, last post: {last(from_telegram)}",
+        f"This month: {from_whatsapp.filter(created_at__gte=month_start).count()} from WhatsApp, "
+        f"{from_telegram.filter(created_at__gte=month_start).count()} from Telegram",
+        f"On the board: {Post.objects.published().count()} posts, "
+        f"{Post.objects.published().filter(kind=Post.Kind.ASSIGNMENT, deadline__gte=now).count()} open assignments",
+    ]
+    newest = from_whatsapp.order_by("-created_at").first()
+    if newest and now - newest.created_at > timedelta(days=3):
+        lines.append("⚠️ Nothing from the WhatsApp bot for 3+ days. Is the PC bot running?")
+    lines.append("Cohere usage: dashboard.cohere.com (free key: 1,000 calls/month)")
+    return "\n".join(lines)
+
+
+def send_backup(chat_id):
+    """Send a dumpdata backup (same as PLAN.md "Backups") to the chat as a file."""
+    out = io.StringIO()
+    call_command("dumpdata", "board", "auth.user", "auth.group", indent=2, stdout=out)
+    name = f"backup-{timezone.localdate():%Y-%m-%d}.json"
+    boundary = uuid.uuid4().hex
+    body = b"".join([
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{chat_id}\r\n".encode(),
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"{name}\"\r\n"
+        f"Content-Type: application/json\r\n\r\n".encode(),
+        out.getvalue().encode(),
+        f"\r\n--{boundary}--\r\n".encode(),
+    ])
+    url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendDocument"
+    request = urllib.request.Request(url, data=body, method="POST",
+                                     headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    urllib.request.urlopen(request, timeout=30).close()
 
 
 def message_time(message):
