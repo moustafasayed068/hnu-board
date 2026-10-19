@@ -377,6 +377,13 @@ The WhatsApp bot only runs while the owner's PC is on. To publish from the phone
 - **Visitor stats:** GoatCounter script only when `GOATCOUNTER_CODE` is set (no cookies).
 - **Tests:** `board/tests/test_extras.py`, `board/tests/test_telegram.py`.
 
+## Levels for imported posts (19 Oct 2026)
+
+- The LLM returns `years` (a list): the levels stated in the message, else the matching course's level, else `[]`.
+- `[]` (level unknown, e.g. a notice for all students) publishes one copy per level instead of guessing one; several levels publish one copy each (`source_id` gets `:L<n>`). A course is kept only on the copy of its own level.
+- Channel default levels (`CHANNELS=jid=4`) and `TELEGRAM_DEFAULT_LEVEL` are optional; leave them empty for a channel that posts for every level.
+- Telegram: `#L3 #L4` when forwarding or in a reply sets several levels; a reply `#L3` on an all-levels post leaves one Level 3 post.
+
 ## Optional later improvements (not MVP)
 
 | Improvement | Add it when |

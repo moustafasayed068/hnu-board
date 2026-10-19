@@ -125,7 +125,8 @@ async function handle(msg) {
   } else if (text) {
     const postedAt = new Date(time * 1000);
     const parsed = await parsePost(text, { postedAt, courses: await getCourses() });
-    if (!parsed.year) parsed.year = CHANNELS.get(jid); // level not in the text: use the channel's
+    // Level not in the text: use the channel's level if it has one, else the site shows it on every level.
+    if (!parsed.years?.length && CHANNELS.get(jid)) parsed.years = [CHANNELS.get(jid)];
     if (!parsed.is_relevant) {
       logger.info({ preview: text.slice(0, 60) }, 'Skipped (not relevant)');
       history(time, 'not relevant (skipped)', text);

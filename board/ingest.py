@@ -111,8 +111,14 @@ def publish(data, source_id, text_hash=None):
         return {"created": [], "duplicate": True}
 
     course = find_course(data.get("course_code"), data.get("course_hint"))
-    year = course.year if course else AcademicYear.objects.filter(number=data.get("year") or 0).first()
-    if year is None:
+    numbers = level_numbers(data)
+    if course and len(numbers) <= 1:
+        numbers = [course.year.number]  # one level: the course decides it
+    # Several levels: one post per level. None known (e.g. a notice for all students):
+    # every level, rather than guessing one.
+    levels = AcademicYear.objects.order_by("number")
+    years = list(levels.filter(number__in=numbers)) or list(levels)
+    if not years:
         return {"error": "could not tell the level"}
 
     programs = list(Program.objects.filter(slug__in=data.get("programs") or [], is_active=True))
@@ -120,28 +126,61 @@ def publish(data, source_id, text_hash=None):
     published_at = min(to_datetime(data.get("posted_at")) or now, now)
 
     created = []
-    for program in programs or [None]:  # no program = the whole level
-        post = Post(
-            kind=data.get("kind") if data.get("kind") in Post.Kind.values else Post.Kind.ANNOUNCEMENT,
-            title=(data.get("title") or "Untitled")[:200],
-            body=data.get("body") or "",
-            year=year,
-            program=program,
-            course=course,
-            deadline=to_datetime(data.get("deadline")),
-            submission_url=(data.get("submission_url") or "")[:200],
-            resource_url=(data.get("resource_url") or "")[:200],
-            published_at=published_at,
-            created_by=bot_user(),
-            source_id=f"{source_id}:{program.slug}" if program else source_id,
-            text_hash=text_hash,
-        )
-        try:
-            save_post(post)
-        except ValidationError as error:
-            return {"error": error.message_dict, "created": created}
-        created.append(post.pk)
+    for year in years:
+        for program in programs or [None]:  # no program = the whole level
+            post_course = course if course and course.year == year else None
+            post = build_post(data, year, program, post_course, published_at, text_hash,
+                              post_source_id(source_id, year if len(years) > 1 else None, program))
+            try:
+                save_post(post)
+            except ValidationError as error:
+                return {"error": error.message_dict, "created": created}
+            created.append(post.pk)
     return {"created": created}
+
+
+def level_numbers(data):
+    """Levels the message is for: "years": [3, 4] (LLM, tags) or the older single "year": 3."""
+    values = data.get("years")
+    if not isinstance(values, list):
+        values = [data.get("year")]
+    numbers = []
+    for value in values:
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            continue
+        if number > 0 and number not in numbers:
+            numbers.append(number)
+    return numbers
+
+
+def post_source_id(source_id, year=None, program=None):
+    """<message id>[:L<level>][:<program>] so every copy of one message has its own id."""
+    parts = [source_id]
+    if year:
+        parts.append(f"L{year.number}")
+    if program:
+        parts.append(program.slug)
+    return ":".join(parts)
+
+
+def build_post(data, year, program, course, published_at, text_hash, source_id):
+    return Post(
+        kind=data.get("kind") if data.get("kind") in Post.Kind.values else Post.Kind.ANNOUNCEMENT,
+        title=(data.get("title") or "Untitled")[:200],
+        body=data.get("body") or "",
+        year=year,
+        program=program,
+        course=course,
+        deadline=to_datetime(data.get("deadline")),
+        submission_url=(data.get("submission_url") or "")[:200],
+        resource_url=(data.get("resource_url") or "")[:200],
+        published_at=published_at,
+        created_by=bot_user(),
+        source_id=source_id,
+        text_hash=text_hash,
+    )
 
 
 def find_course(code, hint):
