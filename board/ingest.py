@@ -9,10 +9,12 @@ import hmac
 import json
 import re
 import unicodedata
+from copy import copy
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.utils import timezone
@@ -163,6 +165,56 @@ def post_source_id(source_id, year=None, program=None):
     if program:
         parts.append(program.slug)
     return ":".join(parts)
+
+
+def message_source_id(source_id):
+    """The message part of a post's source_id, without the :L<level> and :<program> suffixes."""
+    if not source_id:
+        return None
+    slugs = set(Program.objects.values_list("slug", flat=True))
+    parts = source_id.split(":")
+    if parts and parts[-1] in slugs:
+        parts.pop()
+    if parts and re.fullmatch(r"L\d", parts[-1]):
+        parts.pop()
+    return ":".join(parts)
+
+
+def unique(items):
+    """Distinct items, first-seen order (None counts as an item)."""
+    seen = []
+    for item in items:
+        if item not in seen:
+            seen.append(item)
+    return seen
+
+
+def rebuild_copies(posts, years=None, programs=None, course="keep", kind=None):
+    """Replace the copies of one imported message with one post per (level, program).
+
+    Anything not given stays as it is on the first copy. A course is kept only on the
+    copy of its own level. Runs in a transaction: on a validation error nothing changes.
+    """
+    template = posts[0]
+    years = years or unique(p.year for p in posts)
+    programs = programs or unique(p.program for p in posts)
+    course = template.course if course == "keep" else course
+    kind = kind or template.kind
+    base = message_source_id(template.source_id) or f"import:fix:{template.pk}"
+    saved = []
+    with transaction.atomic():
+        Post.objects.filter(pk__in=[p.pk for p in posts]).delete()
+        for year in years:
+            for program in programs:
+                post = copy(template)
+                post.pk = post.id = None
+                post._state.adding = True
+                post.year, post.program, post.kind = year, program, kind
+                post.course = course if course and course.year == year else None
+                post.source_id = post_source_id(base, year if len(years) > 1 else None, program)
+                save_post(post)
+                saved.append(post)
+    return saved
 
 
 def build_post(data, year, program, course, published_at, text_hash, source_id):

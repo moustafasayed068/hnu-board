@@ -12,20 +12,18 @@ import logging
 import re
 import urllib.request
 import uuid
-from copy import copy
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from .ingest import bot_user, is_duplicate, post_source_id, publish, save_post, text_fingerprint
+from .ingest import bot_user, is_duplicate, publish, rebuild_copies, text_fingerprint, unique
 from .llm import parse_post
 from .models import AcademicYear, Course, Post, Program, SiteNotice
 
@@ -172,9 +170,7 @@ def correct_posts(replied_to, text, request):
         Post.objects.filter(pk__in=[p.pk for p in posts]).delete()
         return f"Deleted: {posts[0].title}"
 
-    template = posts[0]
-    course = template.course
-    years = unique(p.year for p in posts)
+    course, years, programs = "keep", None, None
     if "course_code" in overrides:
         course = Course.objects.get(code=overrides["course_code"])
         years = [course.year]
@@ -182,53 +178,14 @@ def correct_posts(replied_to, text, request):
         levels = list(AcademicYear.objects.filter(number__in=overrides["years"]).order_by("number"))
         if levels:
             years = levels
-            if course and course.year not in levels:
-                course = None  # the course belongs to another level
-    programs = unique(p.program for p in posts)
     if "programs" in overrides:
         programs = list(Program.objects.filter(slug__in=overrides["programs"], is_active=True)) or [None]
-    kind = overrides.get("kind", template.kind)
-    base = message_source_id(template.source_id) or f"telegram:fix:{template.pk}"
-
     try:
-        with transaction.atomic():
-            Post.objects.filter(pk__in=[p.pk for p in posts]).delete()
-            saved = []
-            for year in years:
-                for program in programs:
-                    post = copy(template)
-                    post.pk = post.id = None
-                    post._state.adding = True
-                    post_course = course if course and course.year == year else None
-                    post.year, post.program, post.course, post.kind = year, program, post_course, kind
-                    post.source_id = post_source_id(base, year if len(years) > 1 else None, program)
-                    save_post(post)  # same checks and repairs as a new post
-                    saved.append(post)
+        saved = rebuild_copies(posts, years=years, programs=programs, course=course,
+                               kind=overrides.get("kind"))
     except ValidationError as error:
         return f"Couldn't save the fix: {error.messages}"
     return f"Updated:\n{describe(saved, request)}"
-
-
-def unique(items):
-    """Distinct items, first-seen order (None counts as an item)."""
-    seen = []
-    for item in items:
-        if item not in seen:
-            seen.append(item)
-    return seen
-
-
-def message_source_id(source_id):
-    """The message part of a post's source_id, without the :L<level> and :<program> suffixes."""
-    if not source_id:
-        return None
-    slugs = set(Program.objects.values_list("slug", flat=True))
-    parts = source_id.split(":")
-    if parts and parts[-1] in slugs:
-        parts.pop()
-    if parts and re.fullmatch(r"L\d", parts[-1]):
-        parts.pop()
-    return ":".join(parts)
 
 
 def read_tags(text):
