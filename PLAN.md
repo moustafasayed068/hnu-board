@@ -364,6 +364,19 @@ The WhatsApp bot only runs while the owner's PC is on. To publish from the phone
 - **Approved by the owner on 19 Oct 2026** as a second exception to "all writes go through Django Admin".
 - **Tests:** `board/tests/test_telegram.py`, `board/tests/test_ingest.py`.
 
+## Student and owner extras (19 Oct 2026, approved by the owner)
+
+- **Clickable links** in post text: `linkify` filter (`board/templatetags/board_extras.py`), http(s) only, `rel="noopener noreferrer"`.
+- **Last board remembered** on the device (`filter.js`, localStorage): the home page offers "Continue to …".
+- **Link previews:** Open Graph tags in `base.html`; post pages show title, deadline and level.
+- **Installable:** `static/board/manifest.json` + icons ("Add to home screen").
+- **Add to calendar:** `GET /post/<id>/calendar.ics` (read-only), reminders 1 day and 2 hours before. The phone's calendar reminds the student; the site still sends no notifications.
+- **"What's new" banner:** `SiteNotice` model, superusers only (admin or Telegram `/notice <text>`, `/notice off`). Closing it is remembered per device until a newer notice.
+- **Owner tools in Telegram:** `/status` (last imports, counts, warning after 3 days without WhatsApp imports), `/backup` (dumpdata sent to the owner's chat; contains password hashes, keep private).
+- **Cohere usage:** the WhatsApp bot counts its calls per month in `whatsapp-bot/cohere-usage.json` and warns near the 1,000 limit.
+- **Visitor stats:** GoatCounter script only when `GOATCOUNTER_CODE` is set (no cookies).
+- **Tests:** `board/tests/test_extras.py`, `board/tests/test_telegram.py`.
+
 ## Optional later improvements (not MVP)
 
 | Improvement | Add it when |
@@ -372,7 +385,6 @@ The WhatsApp bot only runs while the owner's PC is on. To publish from the phone
 | `Course.tas` restriction | TAs post to wrong courses |
 | `Faculty` model | A second faculty joins |
 | Arabic interface (i18n, RTL) | Students or TAs ask for it |
-| RSS/iCal feed per board | Students want calendar reminders |
 | Per-view caching | Pages measurably slow |
 | PostgreSQL | Moving to a host with a durable DB |
 | Custom domain | University provides one (paid PythonAnywhere plan) |

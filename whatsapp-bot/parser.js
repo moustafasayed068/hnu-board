@@ -1,7 +1,25 @@
 // Turns a raw channel message into the fields board/ingest.py expects.
 // Uses Cohere's free trial key (20 calls/min, 1,000 calls/month): one call per message.
 
+import fs from 'node:fs';
+
 const COHERE_URL = 'https://api.cohere.com/v2/chat';
+const USAGE_FILE = './cohere-usage.json';
+
+// Counts this bot's Cohere calls per month (the free key allows 1,000/month, shared with the
+// site's Telegram import). Returns the count so far this month.
+function countCall() {
+  const month = new Date().toISOString().slice(0, 7); // e.g. 2026-10
+  let usage = {};
+  try {
+    usage = JSON.parse(fs.readFileSync(USAGE_FILE, 'utf8').replace(/^\uFEFF/, ''));
+  } catch {}
+  usage[month] = (usage[month] || 0) + 1;
+  try {
+    fs.writeFileSync(USAGE_FILE, JSON.stringify(usage, null, 2));
+  } catch {}
+  return usage[month];
+}
 
 const SCHEMA = {
   type: 'object',
@@ -71,6 +89,10 @@ async function parseWithCohere(text, postedAt, courses) {
       temperature: 0,
     }),
   });
+  const calls = countCall();
+  if (calls % 50 === 0 || calls >= 900) {
+    console.warn(`Cohere calls this month from the WhatsApp bot: ${calls} (free limit 1,000)`);
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
 
   const data = await res.json();

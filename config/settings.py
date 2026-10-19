@@ -69,6 +69,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'board.context_processors.site',
             ],
         },
     },
@@ -138,6 +139,9 @@ TELEGRAM_DEFAULT_LEVEL = int(os.environ.get('TELEGRAM_DEFAULT_LEVEL') or 0)
 # Cohere LLM for the Telegram import (same key as the WhatsApp bot). Empty = regex fallback.
 COHERE_API_KEY = os.environ.get('COHERE_API_KEY', '').strip()
 COHERE_MODEL = os.environ.get('COHERE_MODEL', 'command-a-03-2025')
+
+# Optional visitor stats (goatcounter.com, no cookies). Your site code, e.g. "hnuboard". Empty = off.
+GOATCOUNTER_CODE = os.environ.get('GOATCOUNTER_CODE', '').strip()
 
 
 # Static files (CSS, JavaScript, Images)

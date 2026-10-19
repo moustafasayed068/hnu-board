@@ -220,3 +220,26 @@ class Post(models.Model):
     def was_edited(self):
         """True if the post changed after it was created (shows "Updated ...")."""
         return self.updated_at - self.created_at > timedelta(minutes=1)
+
+
+class SiteNotice(models.Model):
+    """A "What's new" banner at the top of every page, e.g. a new feature or a site change.
+
+    Only the newest active notice is shown. Students can close it; a new notice shows again.
+    """
+
+    text = models.CharField(max_length=300, help_text="One or two short sentences.")
+    link = models.URLField(blank=True, validators=[validate_http_url], help_text="Optional \"Read more\" link.")
+    is_active = models.BooleanField(default=True, help_text="Untick to hide it.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "site notice"
+
+    def __str__(self):
+        return self.text[:60]
+
+    @classmethod
+    def current(cls):
+        return cls.objects.filter(is_active=True).first()

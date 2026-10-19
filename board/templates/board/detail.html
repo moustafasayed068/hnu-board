@@ -1,6 +1,9 @@
 {% extends "board/base.html" %}
+{% load board_extras %}
 
 {% block title %}{{ post.title }} | HNU Board{% endblock %}
+{% block og_title %}{{ post.title }}{% endblock %}
+{% block og_description %}{% if post.deadline %}Deadline: {{ post.deadline|date:"D j M, H:i" }} · {% endif %}{{ post.year.name }}{% if post.course %} · {{ post.course.code }}{% endif %}{% if post.body %} — {{ post.body|truncatewords:25 }}{% endif %}{% endblock %}
 
 {% block content %}
 <p class="back"><a href="{% url 'board:list' %}?year={{ post.year.number }}{% if post.program %}&amp;program={{ post.program.slug }}{% endif %}">&larr; Back to the board</a></p>
@@ -14,11 +17,12 @@
   <h1 dir="auto">{{ post.title }}</h1>
   {% if post.course %}<p class="card__course">{{ post.course }}</p>{% endif %}
   {% if post.deadline %}<p class="deadline deadline--big">Deadline: {{ post.deadline|date:"D j M Y, H:i" }}</p>{% endif %}
-  {% if post.body %}<p class="prose" dir="auto">{{ post.body|linebreaksbr }}</p>{% endif %}
-  {% if post.notes %}<div class="notes"><h2>Notes</h2><p class="prose" dir="auto">{{ post.notes|linebreaksbr }}</p></div>{% endif %}
+  {% if post.body %}<p class="prose" dir="auto">{{ post.body|linkify }}</p>{% endif %}
+  {% if post.notes %}<div class="notes"><h2>Notes</h2><p class="prose" dir="auto">{{ post.notes|linkify }}</p></div>{% endif %}
 
-  {% if post.resource_url or post.submission_url %}
+  {% if post.resource_url or post.submission_url or post.deadline %}
   <p class="actions">
+    {% if post.deadline and not post.is_overdue %}<a class="button" href="{% url 'board:post_calendar' post.pk %}">Add to calendar</a>{% endif %}
     {% if post.submission_url %}<a class="button button--primary" href="{{ post.submission_url }}" target="_blank" rel="noopener noreferrer">Submit here</a>{% endif %}
     {% if post.resource_url %}<a class="button" href="{{ post.resource_url }}" target="_blank" rel="noopener noreferrer">Open resource</a>{% endif %}
   </p>

@@ -5,7 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#1b3667">
   <title>{% block title %}HNU Board{% endblock %}</title>
+  {# Link previews when a page is shared on WhatsApp, Telegram, Facebook... #}
+  <meta property="og:site_name" content="HNU Board">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{% block og_title %}HNU Board{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}Every assignment and announcement of the Faculty of Computer Science &amp; IT, Helwan National University, in one place.{% endblock %}">
+  <meta property="og:url" content="{{ request.build_absolute_uri }}">
+  <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'board/icon-512.png' %}">
+  <meta name="description" content="{% block meta_description %}Assignments and announcements of the Faculty of Computer Science &amp; IT, Helwan National University.{% endblock %}">
   <link rel="icon" href="{% static 'board/faculty-logo.png' %}">
+  <link rel="apple-touch-icon" href="{% static 'board/apple-touch-icon.png' %}">
+  <link rel="manifest" href="{% static 'board/manifest.json' %}">
   <link rel="stylesheet" href="{% static 'board/site.css' %}">
 </head>
 <body>
@@ -19,10 +29,20 @@
     </a>
   </header>
   <div class="stripe" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  {% if site_notice %}
+  <aside class="notice" data-notice="{{ site_notice.pk }}" role="status">
+    <p dir="auto"><strong>What's new:</strong> {{ site_notice.text }}{% if site_notice.link %} <a href="{{ site_notice.link }}" target="_blank" rel="noopener noreferrer">Read more</a>{% endif %}</p>
+    <button type="button" class="notice__close" aria-label="Close" hidden data-notice-close>&times;</button>
+  </aside>
+  {% endif %}
   <main>
     {% block content %}{% endblock %}
   </main>
   <footer class="site-footer">Helwan National University · All times are Cairo time</footer>
+  <script src="{% static 'board/notice.js' %}" defer></script>
   {% block scripts %}{% endblock %}
+  {% if GOATCOUNTER_CODE %}{# visitor counts only: no cookies, no personal data #}
+  <script data-goatcounter="https://{{ GOATCOUNTER_CODE }}.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
+  {% endif %}
 </body>
 </html>
