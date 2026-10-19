@@ -19,6 +19,13 @@
   <link rel="stylesheet" href="{% static 'board/site.css' %}">
 </head>
 <body>
+  {% if site_notice %}
+  {# Announcement bar across the top, like a shop's offer bar. Closing it is remembered (notice.js). #}
+  <aside class="notice" data-notice="{{ site_notice.pk }}" role="status">
+    <button type="button" class="notice__close" aria-label="Close" hidden data-notice-close>&times;</button>
+    <p dir="auto"><strong>What's new:</strong> {{ site_notice.text }}{% if site_notice.link %} <a href="{{ site_notice.link }}" target="_blank" rel="noopener noreferrer">Read more</a>{% endif %}</p>
+  </aside>
+  {% endif %}
   <header class="site-header">
     <a class="brand" href="{% url 'board:list' %}">
       <img src="{% static 'board/faculty-logo.png' %}" alt="" width="44" height="44">
@@ -29,12 +36,6 @@
     </a>
   </header>
   <div class="stripe" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-  {% if site_notice %}
-  <aside class="notice" data-notice="{{ site_notice.pk }}" role="status">
-    <p dir="auto"><strong>What's new:</strong> {{ site_notice.text }}{% if site_notice.link %} <a href="{{ site_notice.link }}" target="_blank" rel="noopener noreferrer">Read more</a>{% endif %}</p>
-    <button type="button" class="notice__close" aria-label="Close" hidden data-notice-close>&times;</button>
-  </aside>
-  {% endif %}
   <main>
     {% block content %}{% endblock %}
   </main>

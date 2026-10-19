@@ -164,11 +164,20 @@ main { max-width: 46rem; margin: 0 auto; padding: 1rem 1rem 2rem; }
 /* ---- Links inside post text ---- */
 .prose a { color: var(--navy); overflow-wrap: anywhere; direction: ltr; unicode-bidi: isolate; }
 
-/* ---- "What's new" banner ---- */
+/* ---- "What's new" bar: full width at the very top, close button top-left ---- */
 .notice {
-  display: flex; align-items: flex-start; gap: 0.5rem; max-width: 46rem; width: calc(100% - 2rem); margin: 0.8rem auto 0;
-  padding: 0.7rem 0.9rem; background: #fff4e5; border: 1.5px solid #f4c27a; border-radius: var(--radius);
+  position: relative;
+  background: var(--orange);
+  color: #fff;
+  text-align: center;
+  padding: 0.6rem 2.8rem;
 }
-.notice p { flex: 1; font-size: 0.95rem; }
-.notice a { color: var(--navy); font-weight: 600; }
-.notice__close { border: 0; background: none; font-size: 1.4rem; line-height: 1; cursor: pointer; color: var(--muted); }
+.notice p { max-width: 46rem; margin: 0 auto; font-size: 0.92rem; line-height: 1.4; }
+.notice a { color: #fff; font-weight: 700; text-decoration: underline; }
+.notice__close {
+  position: absolute; top: 50%; left: 0.6rem; transform: translateY(-50%);
+  width: 2rem; height: 2rem; border: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18); color: #fff;
+  font-size: 1.3rem; line-height: 1; cursor: pointer;
+}
+.notice__close:hover, .notice__close:focus-visible { background: rgba(255, 255, 255, 0.32); }
