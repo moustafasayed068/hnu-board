@@ -5,6 +5,7 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from board.ingest import text_fingerprint
 from board.models import Post
 
 from .base import BoardTestCase
@@ -106,3 +107,35 @@ class IngestTests(BoardTestCase):
         response = self.client.get(url, headers={"X-Ingest-Token": TOKEN})
         codes = {c["code"] for c in response.json()["courses"]}
         self.assertIn("DSC 301", codes)
+
+    def test_same_text_with_another_id_is_imported_once(self):
+        self.send(source_id="chan:1", text="Quiz on *Sunday*\nLevel 3")
+        response = self.send(source_id="telegram:9:9", text="quiz on Sunday  Level 3")
+        self.assertTrue(response.json()["duplicate"])
+        self.assertEqual(Post.objects.count(), 1)
+
+    def test_different_text_is_a_new_post(self):
+        self.send(source_id="chan:1", text="Quiz on Sunday")
+        self.send(source_id="chan:2", text="Quiz on Monday")
+        self.assertEqual(Post.objects.count(), 2)
+
+    def test_check_only_reports_duplicates_without_creating(self):
+        def check(**fields):
+            return self.send(check_only=True, **fields).json()["duplicate"]
+
+        self.assertFalse(check(source_id="chan:1", text="Hello students"))
+        self.assertFalse(Post.objects.exists())
+        self.send(source_id="chan:1", text="Hello students")
+        self.assertTrue(check(source_id="chan:1", text="Hello students"))
+        self.assertTrue(check(source_id="other:5", text="hello   students"))
+
+
+class FingerprintTests(BoardTestCase):
+    def test_ignores_spacing_case_and_formatting(self):
+        self.assertEqual(text_fingerprint("*Quiz*  on\n_Sunday_"), text_fingerprint("quiz on sunday"))
+        self.assertEqual(text_fingerprint("كويز\u200f يوم الأحد"), text_fingerprint("كويز يوم الأحد"))
+
+    def test_empty_text_has_no_fingerprint(self):
+        self.assertIsNone(text_fingerprint(""))
+        self.assertIsNone(text_fingerprint("  * _ "))
+        self.assertIsNone(text_fingerprint(None))

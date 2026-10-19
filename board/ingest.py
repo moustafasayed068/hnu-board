@@ -1,11 +1,14 @@
-"""WhatsApp import: the only write path outside Django Admin.
+"""WhatsApp import: one of the two write paths outside Django Admin (see also telegram.py).
 
 The bot in `whatsapp-bot/` reads the faculty WhatsApp channel, turns each message
 into fields with an LLM and POSTs them here. Both views are protected by a shared
 secret (INGEST_TOKEN). With no token set, they return 404 as if they didn't exist.
 """
+import hashlib
 import hmac
 import json
+import re
+import unicodedata
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -67,14 +70,50 @@ def ingest_post(request):
     except (ValueError, KeyError, TypeError):
         return JsonResponse({"error": "bad json or missing source_id"}, status=400)
 
-    already = Post.objects.filter(Q(source_id=source_id) | Q(source_id__startswith=source_id + ":"))
-    if already.exists():
-        return JsonResponse({"created": [], "duplicate": True})
+    text_hash = text_fingerprint(data.get("text"))
+    if data.get("check_only"):  # the bot asks before spending an LLM call on the message
+        return JsonResponse({"duplicate": is_duplicate(source_id, text_hash)})
+    result = publish(data, source_id, text_hash)
+    status = 422 if "error" in result else 200
+    return JsonResponse(result, status=status)
+
+
+def text_fingerprint(text):
+    """SHA-256 of the message text with formatting, spaces and case removed, or None.
+
+    WhatsApp and a copy forwarded to Telegram can differ in spacing and in *bold* or
+    _italic_ marks, so those are ignored; any real change in wording gives a new hash.
+    """
+    if not text or not str(text).strip():
+        return None
+    text = unicodedata.normalize("NFKC", str(text))
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")  # zero-width marks
+    text = re.sub(r"[\s*_~`]+", "", text).casefold()
+    return hashlib.sha256(text.encode()).hexdigest() if text else None
+
+
+def is_duplicate(source_id=None, text_hash=None):
+    """True if this message (by id, or by its text) is already on the board."""
+    query = Q(pk__in=[])
+    if source_id:
+        query |= Q(source_id=source_id) | Q(source_id__startswith=source_id + ":")
+    if text_hash:
+        query |= Q(text_hash=text_hash)
+    return Post.objects.filter(query).exists()
+
+
+def publish(data, source_id, text_hash=None):
+    """Turn parsed fields into published posts. Shared by the WhatsApp and Telegram imports.
+
+    Returns {"created": [ids]}, {"created": [], "duplicate": True} or {"error": ...}.
+    """
+    if is_duplicate(source_id, text_hash):
+        return {"created": [], "duplicate": True}
 
     course = find_course(data.get("course_code"), data.get("course_hint"))
     year = course.year if course else AcademicYear.objects.filter(number=data.get("year") or 0).first()
     if year is None:
-        return JsonResponse({"error": "could not tell the level"}, status=422)
+        return {"error": "could not tell the level"}
 
     programs = list(Program.objects.filter(slug__in=data.get("programs") or [], is_active=True))
     now = timezone.now()
@@ -95,13 +134,14 @@ def ingest_post(request):
             published_at=published_at,
             created_by=bot_user(),
             source_id=f"{source_id}:{program.slug}" if program else source_id,
+            text_hash=text_hash,
         )
         try:
             save_post(post)
         except ValidationError as error:
-            return JsonResponse({"error": error.message_dict, "created": created}, status=422)
+            return {"error": error.message_dict, "created": created}
         created.append(post.pk)
-    return JsonResponse({"created": created})
+    return {"created": created}
 
 
 def find_course(code, hint):

@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node index.js",
-    "find-channel": "node find-channel.js"
+    "find-channel": "node find-channel.js",
+    "list-recent": "node list-recent.js"
   },
   "dependencies": {
     "baileys": "7.0.0-rc14",

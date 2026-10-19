@@ -2,7 +2,14 @@
 import 'dotenv/config';
 import { connect, logger } from './connect.js';
 import { parsePost } from './parser.js';
+import fs from 'node:fs';
 import { fetchRecent, loadState, saveState } from './catchup.js';
+
+// One line per handled post (time, what happened, start of the text), to see later why a post is missing.
+function history(time, result, text) {
+  const line = { at: new Date(time * 1000).toISOString(), result, text: (text || '').slice(0, 80) };
+  try { fs.appendFileSync('./history.jsonl', JSON.stringify(line) + '\n'); } catch {}
+}
 
 const SITE = process.env.SITE_URL.replace(/\/$/, ''); // e.g. https://mosuatafa.pythonanywhere.com
 const HEADERS = { 'Content-Type': 'application/json', 'X-Ingest-Token': process.env.INGEST_TOKEN };
@@ -42,6 +49,21 @@ function extractText(message) {
   ).trim();
 }
 
+// Ask the site whether this post is already there (e.g. forwarded via Telegram), to save an LLM call.
+async function alreadyOnSite(source_id, text) {
+  try {
+    const res = await fetch(`${SITE}/ingest/`, {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({ source_id, text, check_only: true }),
+    });
+    if (res.ok) return (await res.json()).duplicate === true;
+  } catch {
+    // site unreachable: carry on, publish() will retry and the site still rejects repeats
+  }
+  return false;
+}
+
 async function getCourses() {
   try {
     const res = await fetch(`${SITE}/ingest/courses/`, { headers: HEADERS });
@@ -66,10 +88,11 @@ async function publish(payload) {
       if (res.status === 422 || res.status === 403) {
         // The site understood but refused (e.g. no level found): retrying won't help.
         logger.error({ title: payload.title, body }, 'Site refused the post');
-        return true;
+        return 'refused';
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
-      logger.info({ title: payload.title, result: body }, 'Published');
+      const duplicate = body.includes('"duplicate": true') || body.includes('"duplicate":true');
+      logger.info({ title: payload.title, result: body }, duplicate ? 'Already on the site (skipped)' : 'Published');
       return true;
     } catch (e) {
       logger.warn({ attempt, err: e.message }, 'Send failed');
@@ -95,19 +118,26 @@ async function handle(msg) {
   if (time <= state[jid]) return; // already handled (or from before the first run)
 
   const text = extractText(msg.message);
-  if (text) {
+  if (!text) history(time, 'no text (skipped)', Object.keys(msg.message || {}).join(','));
+  if (text && (await alreadyOnSite(`${jid}:${time}`, text))) {
+    logger.info({ preview: text.slice(0, 60) }, 'Already on the site (skipped)');
+    history(time, 'already on site (skipped)', text);
+  } else if (text) {
     const postedAt = new Date(time * 1000);
     const parsed = await parsePost(text, { postedAt, courses: await getCourses() });
     if (!parsed.year) parsed.year = CHANNELS.get(jid); // level not in the text: use the channel's
     if (!parsed.is_relevant) {
       logger.info({ preview: text.slice(0, 60) }, 'Skipped (not relevant)');
+      history(time, 'not relevant (skipped)', text);
     } else {
       const ok = await publish({
         ...parsed,
         // Channel + send time: the same in live and caught-up messages, so the site can ignore repeats.
         source_id: `${jid}:${time}`,
+        text, // raw text: the site matches it with the same post forwarded via Telegram
         posted_at: postedAt.toISOString(),
       });
+      history(time, ok === 'refused' ? 'refused by site (no level?)' : ok ? 'sent to site' : 'site unreachable', text);
       if (!ok) {
         siteDown = true;
         return;

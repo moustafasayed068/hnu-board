@@ -126,6 +126,19 @@ INGEST_TOKEN = os.environ.get('INGEST_TOKEN', '')
 # Account that bot posts are credited to; created automatically, can't log in.
 INGEST_USERNAME = os.environ.get('INGEST_USERNAME', 'whatsapp-bot')
 
+# Telegram import (board/telegram.py). Empty token or secret = the webhook URL returns 404.
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
+TELEGRAM_WEBHOOK_SECRET = os.environ.get('TELEGRAM_WEBHOOK_SECRET', '').strip()
+# Comma-separated Telegram user IDs allowed to post (the bot tells you yours).
+TELEGRAM_ALLOWED_USER_IDS = {
+    int(i) for i in os.environ.get('TELEGRAM_ALLOWED_USER_IDS', '').split(',') if i.strip().isdigit()
+}
+# Level used when a forwarded post doesn't say it (0 = none, the post is refused).
+TELEGRAM_DEFAULT_LEVEL = int(os.environ.get('TELEGRAM_DEFAULT_LEVEL') or 0)
+# Cohere LLM for the Telegram import (same key as the WhatsApp bot). Empty = regex fallback.
+COHERE_API_KEY = os.environ.get('COHERE_API_KEY', '').strip()
+COHERE_MODEL = os.environ.get('COHERE_MODEL', 'command-a-03-2025')
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
