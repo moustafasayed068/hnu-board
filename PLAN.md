@@ -382,6 +382,7 @@ The WhatsApp bot only runs while the owner's PC is on. To publish from the phone
 - The LLM returns `years` (a list): the levels stated in the message, else the matching course's level, else `[]`.
 - `[]` (level unknown, e.g. a notice for all students) publishes one copy per level instead of guessing one; several levels publish one copy each (`source_id` gets `:L<n>`). A course is kept only on the copy of its own level.
 - Channel default levels (`CHANNELS=jid=4`) and `TELEGRAM_DEFAULT_LEVEL` are optional; leave them empty for a channel that posts for every level.
+- Old posts: `python manage.py fix_import_levels` (dry run) / `--apply` re-asks the LLM for course-less imported posts and moves them; one Cohere call per message.
 - Telegram: `#L3 #L4` when forwarding or in a reply sets several levels; a reply `#L3` on an all-levels post leaves one Level 3 post.
 
 ## Optional later improvements (not MVP)
